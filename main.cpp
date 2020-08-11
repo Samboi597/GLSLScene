@@ -22,6 +22,51 @@ using namespace glm;
 #include <objloader.hpp>
 #include <vboindexer.hpp>
 
+float skyboxVertices[] = {
+        // positions          
+        -50.0f,  50.0f, -50.0f,
+        -50.0f, -50.0f, -50.0f,
+         50.0f, -50.0f, -50.0f,
+         50.0f, -50.0f, -50.0f,
+         50.0f,  50.0f, -50.0f,
+        -50.0f,  50.0f, -50.0f,
+
+        -50.0f, -50.0f,  50.0f,
+        -50.0f, -50.0f, -50.0f,
+        -50.0f,  50.0f, -50.0f,
+        -50.0f,  50.0f, -50.0f,
+        -50.0f,  50.0f,  50.0f,
+        -50.0f, -50.0f,  50.0f,
+
+         50.0f, -50.0f, -50.0f,
+         50.0f, -50.0f,  50.0f,
+         50.0f,  50.0f,  50.0f,
+         50.0f,  50.0f,  50.0f,
+         50.0f,  50.0f, -50.0f,
+         50.0f, -50.0f, -50.0f,
+
+        -50.0f, -50.0f,  50.0f,
+        -50.0f,  50.0f,  50.0f,
+         50.0f,  50.0f,  50.0f,
+         50.0f,  50.0f,  50.0f,
+         50.0f, -50.0f,  50.0f,
+        -50.0f, -50.0f,  50.0f,
+
+        -50.0f,  50.0f, -50.0f,
+         50.0f,  50.0f, -50.0f,
+         50.0f,  50.0f,  50.0f,
+         50.0f,  50.0f,  50.0f,
+        -50.0f,  50.0f,  50.0f,
+        -50.0f,  50.0f, -50.0f,
+
+        -50.0f, -50.0f, -50.0f,
+        -50.0f, -50.0f,  50.0f,
+         50.0f, -50.0f, -50.0f,
+         50.0f, -50.0f, -50.0f,
+        -50.0f, -50.0f,  50.0f,
+         50.0f, -50.0f,  50.0f
+    };
+
 int main(void)
 {
 	//initialise glfw
@@ -76,12 +121,24 @@ int main(void)
 	GLuint sceneShader = LoadShaders("vertShader.vert", "fragShader.frag");
 	GLuint depthShader = LoadShaders("vertDepth.vert", "fragDepth.frag");
 	GLuint debugShader = LoadShaders("debugShader.vert", "debugShader.frag");
+	GLuint skyShader = LoadShaders("vertSky.vert", "fragSky.frag");
 
 	//textures
 	GLuint Texture = loadBMP_custom("checkerBoard.bmp");
 	GLuint TextureR = loadBMP_custom("RED.BMP");
 	GLuint TextureG = loadBMP_custom("GRN.BMP");
 	GLuint TextureB = loadBMP_custom("BLU.BMP");
+
+	//load skybox textures
+	vector<const char*> skyboxTextures;
+	skyboxTextures.push_back("CubeFaceNX.bmp");
+	skyboxTextures.push_back("CubeFacePX.bmp");
+	skyboxTextures.push_back("CubeFacePZ.bmp");
+	skyboxTextures.push_back("CubeFaceNZ.bmp");
+	skyboxTextures.push_back("CubeFacePY.bmp");
+	skyboxTextures.push_back("CubeFaceNY.bmp");
+
+	//handles
 
 	GLuint depthMVPID = glGetUniformLocation(depthShader, "MVP");
 
@@ -92,11 +149,17 @@ int main(void)
 	GLuint lightViewID = glGetUniformLocation(sceneShader, "lightV"); 
 	GLuint lightPosID = glGetUniformLocation(sceneShader, "lightPosition");
 	
-	GLuint TextureID = glGetUniformLocation(sceneShader, "Texture");
+	GLuint TextureID = glGetUniformLocation(sceneShader, "cubeMap");
+	//add another texture handler
 	GLuint depthMapID = glGetUniformLocation(sceneShader, "depthMap");
 	GLuint cameraPosID = glGetUniformLocation(sceneShader, "cameraPosition");
 
 	GLuint debugMapID = glGetUniformLocation(debugShader, "depthMap");
+
+	//sky shader IDs
+	GLuint skyProjID = glGetUniformLocation(skyShader, "P");
+	GLuint skyViewID = glGetUniformLocation(skyShader, "V");
+	GLuint skyTextureID = glGetUniformLocation(skyShader, "skybox");
 
 	//first depth map FBO
 	GLuint depthMapFBO1;
@@ -106,10 +169,10 @@ int main(void)
 	glGenTextures(1, &depthMap1);
 	glBindTexture(GL_TEXTURE_2D, depthMap1);	
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, 1024, 1024, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); 
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); 
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO1);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMap1, 0);
@@ -125,27 +188,31 @@ int main(void)
 	//second depth map FBO
 	GLuint depthMapFBO2;
 	glGenFramebuffers(1, &depthMapFBO2);
+
 	//depth map texture
 	GLuint depthMap2;
 	glGenTextures(1, &depthMap2);
 	glBindTexture(GL_TEXTURE_2D, depthMap2);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, 1024, 1024, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, 1024, 1024, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_R_TO_TEXTURE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); 
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
 	//attach depth texture
 	glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO2);
-	glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthMap2, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMap2, 0);
 	glDrawBuffer(GL_NONE);
     glReadBuffer(GL_NONE);
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
 		return -1;
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 */
+
+	//skybox cubemap
+	GLuint cubemapTexture = loadBMP_cubemap(skyboxTextures);
 
 	//Load plane model
 	vector<vec3> V;
@@ -322,7 +389,14 @@ int main(void)
 	indexT.clear();
 	indexN.clear();
 
-	vec3 lightPos(5.0, 5.0, 5.0);
+	//define the skybox
+	GLuint skyboxVBO;
+	glGenBuffers(1, &skyboxVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
+
+	vec3 lightPos(-5.0, 5.0, 5.0);
+	//vec3 lightPos2(-2.0, 2.0, 2.0);
 
 	while ((glfwGetKey(window, GLFW_KEY_ESCAPE) != GLFW_PRESS) && (!glfwWindowShouldClose(window)))
 	{
@@ -394,31 +468,19 @@ int main(void)
 		glDrawElements(GL_TRIANGLES, sphereNum, GL_UNSIGNED_SHORT, (void*)0);
 
 		glDisableVertexAttribArray(0);
-/*
 
+/*
 		//second depth map
 
-		lightPos = vec3(-4.0, 4.0, 4.0);
-		shadowTransforms.push_back(proj * lookAt(lightPos, lightPos + vec3(1.0f, 0.0f, 0.0f), vec3(0.0f, -1.0f, 0.0f)));
-        shadowTransforms.push_back(proj * lookAt(lightPos, lightPos + vec3(-1.0f, 0.0f, 0.0f), vec3(0.0f, -1.0f, 0.0f)));
-        shadowTransforms.push_back(proj * lookAt(lightPos, lightPos + vec3(0.0f, 1.0f, 0.0f), vec3(0.0f, 0.0f, 1.0f)));
-        shadowTransforms.push_back(proj * lookAt(lightPos, lightPos + vec3(0.0f, -1.0f, 0.0f), vec3(0.0f, 0.0f, -1.0f)));
-        shadowTransforms.push_back(proj * lookAt(lightPos, lightPos + vec3(0.0f, 0.0f, 1.0f), vec3(0.0f, -1.0f, 0.0f)));
-        shadowTransforms.push_back(proj * lookAt(lightPos, lightPos + vec3(0.0f, 0.0f, -1.0f), vec3(0.0f, -1.0f, 0.0f)));
-
 		glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO2);
-		glClear(GL_DEPTH_BUFFER_BIT);
-		glUseProgram(depthShader);
-		glUniformMatrix4fv(glGetUniformLocation(depthShader, "shadowMatrices[0]"), 1, GL_FALSE, &shadowTransforms[0][0][0]);
-		glUniformMatrix4fv(glGetUniformLocation(depthShader, "shadowMatrices[1]"), 1, GL_FALSE, &shadowTransforms[1][0][0]);
-		glUniformMatrix4fv(glGetUniformLocation(depthShader, "shadowMatrices[2]"), 1, GL_FALSE, &shadowTransforms[2][0][0]);
-		glUniformMatrix4fv(glGetUniformLocation(depthShader, "shadowMatrices[3]"), 1, GL_FALSE, &shadowTransforms[3][0][0]);
-		glUniformMatrix4fv(glGetUniformLocation(depthShader, "shadowMatrices[4]"), 1, GL_FALSE, &shadowTransforms[4][0][0]);
-		glUniformMatrix4fv(glGetUniformLocation(depthShader, "shadowMatrices[5]"), 1, GL_FALSE, &shadowTransforms[5][0][0]);
-		glUniform3fv(glGetUniformLocation(depthShader, "lightPos"), 1, &lightPos[0]);
-		glUniformMatrix4fv(glGetUniformLocation(depthShader, "M"), 1, GL_FALSE, &model[0][0]);
 
-		glUniform3fv(glGetUniformLocation(sceneShader, "light2"), 1, &lightPos[0]);
+		mat4 lightProj = perspective(radians(90.0f), 1.0f, 1.0f, 20.0f);
+		//mat4 proj = ortho(-10.0f, 10.0f, -10.0f, 10.0f, 1.0f, 20.0f);
+		mat4 lightView = lookAt(lightPos2, vec3(0.0f), vec3(0.0f, 1.0f, 0.0f));
+		mat4 lightModel = mat4(1.0f);
+		mat4 depthMVP = lightProj * lightView * lightModel;
+	
+		glUniformMatrix4fv(depthMVPID, 1, GL_FALSE, &depthMVP[0][0]);
 
 		//render scene
 
@@ -469,9 +531,6 @@ int main(void)
 		glDrawElements(GL_TRIANGLES, sphereNum, GL_UNSIGNED_SHORT, (void*)0);
 
 		glDisableVertexAttribArray(0);
-
-		shadowTransforms.clear();
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 */
 
 		//the actual scene
@@ -632,7 +691,29 @@ int main(void)
 		glDisableVertexAttribArray(0);
 		glDisableVertexAttribArray(1);
 		glDisableVertexAttribArray(2);
-		
+
+		//mat4 proj = getProjectionMatrix();
+		//mat4 view = getViewMatrix();
+
+		//draw the skybox
+		glDepthFunc(GL_LEQUAL);
+		glUseProgram(skyShader);
+
+		glUniformMatrix4fv(skyProjID, 1, GL_FALSE, &proj[0][0]);
+		glUniformMatrix4fv(skyViewID, 1, GL_FALSE, &view[0][0]);
+		glUniform1i(skyTextureID, 0);
+
+		glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+
+		glEnableVertexAttribArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+		glDrawArrays(GL_TRIANGLES, 0, 36);
+
+		glDisableVertexAttribArray(0);
+
 		//draw depth map for debugging purposes
 /*
 		glViewport(0, 0, 256, 256);
