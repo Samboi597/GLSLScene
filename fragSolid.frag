@@ -1,7 +1,6 @@
 #version 330 core
 
 // Interpolated values from the vertex shaders
-in vec2 UV;
 in vec3 Position;
 in vec3 Normal;
 in vec4 Position_lightspace;
@@ -11,28 +10,60 @@ in vec4 Position_lightspace;
 out vec3 color;
 
 // Values that stay constant for the whole mesh.
-uniform sampler2D Texture;
 uniform sampler2D depthMap;
 uniform vec3 lightPosition;
 uniform vec3 cameraPosition;
 uniform mat4 P;
 uniform mat4 V;
+uniform float t;
 
 void main()
 {
-	vec3 TexColour = texture(Texture, UV).rgb;
-	vec3 n = normalize(Normal);
+    vec3 n = normalize(Normal);
 
-	//ambient
+    //c will determine which colour band to calculate within
+	float c = Position.y + t;
+    
+    //clamp c to between -1 and 1 inclusive
+    while (c > 1.0) c -= 1.0;
+    while (c < 0.0) c += 1.0;
 
-	vec3 colourA = 0.1 * TexColour;
+    c *= 6.0;
+    if (c > 5.0) //red -> yellow
+    {
+        color = vec3(1.0, 6.0 - c, 0.0);
+    }
+    else if (c > 4.0) //yellow -> green
+    {
+        color = vec3(c - 4.0, 1.0, 0.0);
+    }
+    else if (c > 3.0) //green to cyan
+    {
+        color = vec3(0.0, 1.0, 4.0 - c);
+    }
+    else if (c > 2.0) //cyan to blue
+    {
+        color = vec3(0.0, c - 2.0, 1.0);
+    }
+    else if (c > 1.0) //blue to magenta
+    {
+        color = vec3(2.0 - c, 0.0, 1.0);
+    }
+    else if (c > 0.0) //magenta to red
+    {
+        color = vec3(1.0, 0.0, c);
+    }
 
-	//diffuse
+    //ambient
+
+	vec3 colourA = 0.1 * color;
+
+    //diffuse
 
 	vec3 l = normalize(lightPosition - Position);
 	vec3 colourD = max(dot(l, n), 0.0) * vec3(0.3);
 
-	//specular
+    //specular
 
 	vec3 v = normalize(cameraPosition - Position);
 	vec3 h = normalize(l + v);
@@ -60,5 +91,5 @@ void main()
 	}
 	shadow /= 9.0;
 
-	color = (colourA + (1.0 - shadow) * (colourD + colourS)) * TexColour;
+	color = (colourA + (1.0 - shadow) * (colourD + colourS)) * color;
 }
